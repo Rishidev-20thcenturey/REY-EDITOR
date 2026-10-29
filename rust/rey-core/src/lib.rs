@@ -6,6 +6,28 @@ pub mod render;
 
 pub const MAX_DOCUMENT_PIXELS: u64 = 144_000_000;
 pub const TILE_SIZE: u32 = 256;
+pub const PROJECT_SCHEMA_VERSION: u16 = 1;
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ProjectFile {
+    pub schema_version: u16,
+    pub document: Document,
+}
+
+impl ProjectFile {
+    pub fn new(document: Document) -> Self {
+        Self {
+            schema_version: PROJECT_SCHEMA_VERSION,
+            document,
+        }
+    }
+    pub fn encode(&self) -> Result<Vec<u8>, serde_json::Error> {
+        serde_json::to_vec(self)
+    }
+    pub fn decode(bytes: &[u8]) -> Result<Self, serde_json::Error> {
+        serde_json::from_slice(bytes)
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct TileStore {
@@ -311,9 +333,11 @@ mod tests {
     #[test]
     fn project_serializes() {
         let d = Document::new(10, 10).unwrap();
-        let json = serde_json::to_string(&d).unwrap();
-        let copy: Document = serde_json::from_str(&json).unwrap();
-        assert_eq!(d, copy);
+        let project = ProjectFile::new(d);
+        let bytes = project.encode().unwrap();
+        let copy = ProjectFile::decode(&bytes).unwrap();
+        assert_eq!(copy.schema_version, PROJECT_SCHEMA_VERSION);
+        assert_eq!(project, copy);
     }
     #[test]
     fn commands_validate_at_one_boundary() {
