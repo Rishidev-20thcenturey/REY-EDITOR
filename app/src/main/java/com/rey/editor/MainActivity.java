@@ -104,8 +104,9 @@ public class MainActivity extends Activity {
     }
 
     private static final class Layer {
-        String name; Bitmap bitmap; boolean visible = true; float opacity = 1f;
+        String name; Bitmap bitmap; Bitmap mask; boolean visible = true; float opacity = 1f;
         Layer(String name, Bitmap bitmap) { this.name = name; this.bitmap = bitmap; }
+        Layer copy() { Layer copy = new Layer(name, bitmap.copy(Bitmap.Config.ARGB_8888, true)); copy.mask = mask == null ? null : mask.copy(Bitmap.Config.ARGB_8888, true); copy.visible = visible; copy.opacity = opacity; return copy; }
     }
 
     private final class StudioView extends View {
@@ -139,7 +140,11 @@ public class MainActivity extends Activity {
         Bitmap composite() {
             Bitmap result = Bitmap.createBitmap(base.getWidth(), base.getHeight(), Bitmap.Config.ARGB_8888);
             Canvas canvas = new Canvas(result); canvas.drawColor(Color.TRANSPARENT);
-            for (Layer layer : layers) if (layer.visible) { paint.setAlpha(Math.round(layer.opacity * 255)); canvas.drawBitmap(layer.bitmap, 0, 0, paint); }
+            for (Layer layer : layers) if (layer.visible) {
+                paint.setAlpha(Math.round(layer.opacity * 255));
+                if (layer.mask == null) canvas.drawBitmap(layer.bitmap, 0, 0, paint);
+                else { Bitmap masked = Bitmap.createBitmap(layer.bitmap.getWidth(), layer.bitmap.getHeight(), Bitmap.Config.ARGB_8888); Canvas maskCanvas = new Canvas(masked); maskCanvas.drawBitmap(layer.bitmap, 0, 0, paint); paint.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)); maskCanvas.drawBitmap(layer.mask, 0, 0, paint); paint.setXfermode(null); canvas.drawBitmap(masked, 0, 0, paint); masked.recycle(); }
+            }
             paint.setAlpha(255); return result;
         }
 
