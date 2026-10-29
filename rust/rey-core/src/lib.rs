@@ -66,6 +66,35 @@ pub enum Command {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct History {
+    undo: Vec<Document>,
+    redo: Vec<Document>,
+    limit: usize,
+}
+
+impl History {
+    pub fn new(limit: usize) -> Self { Self { undo: Vec::new(), redo: Vec::new(), limit: limit.max(1) } }
+    pub fn undo_len(&self) -> usize { self.undo.len() }
+    pub fn redo_len(&self) -> usize { self.redo.len() }
+    pub fn execute(&mut self, document: &mut Document, command: Command) -> Result<(), DocumentError> {
+        let before = document.clone();
+        document.apply(command)?;
+        self.undo.push(before);
+        if self.undo.len() > self.limit { self.undo.remove(0); }
+        self.redo.clear();
+        Ok(())
+    }
+    pub fn undo(&mut self, document: &mut Document) -> bool {
+        let Some(previous) = self.undo.pop() else { return false };
+        self.redo.push(document.clone()); *document = previous; true
+    }
+    pub fn redo(&mut self, document: &mut Document) -> bool {
+        let Some(next) = self.redo.pop() else { return false };
+        self.undo.push(document.clone()); *document = next; true
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Document {
     pub width: u32,
     pub height: u32,
@@ -121,4 +150,5 @@ mod tests {
     #[test] fn project_serializes() { let d=Document::new(10,10).unwrap(); let json=serde_json::to_string(&d).unwrap(); let copy:Document=serde_json::from_str(&json).unwrap(); assert_eq!(d,copy); }
     #[test] fn commands_validate_at_one_boundary() { let mut d=Document::new(10,10).unwrap(); d.apply(Command::AddLayer { name: "Ink".into() }).unwrap(); let id=d.selected_layer; d.apply(Command::SetOpacity { id, opacity: 100 }).unwrap(); d.apply(Command::SetVisibility { id, visible: false }).unwrap(); assert_eq!(d.layers[1].opacity,100); assert!(!d.layers[1].visible); assert!(d.apply(Command::RenameLayer { id:999, name:"bad".into() }).is_err()); }
     #[test] fn sparse_tiles_allocate_only_when_touched() { let mut tiles=TileStore::new(1000,1000).unwrap(); assert_eq!(tiles.tile_count(),0); tiles.ensure_tile(2,3).unwrap(); assert_eq!(tiles.tile_count(),1); assert_eq!(tiles.ensure_tile(99,0),Err(DocumentError::MissingTile)); }
+    #[test] fn history_groups_commands_and_bounds_memory() { let mut d=Document::new(10,10).unwrap(); let mut h=History::new(2); h.execute(&mut d, Command::AddLayer { name:"A".into() }).unwrap(); h.execute(&mut d, Command::AddLayer { name:"B".into() }).unwrap(); h.execute(&mut d, Command::AddLayer { name:"C".into() }).unwrap(); assert_eq!(h.undo_len(),2); assert!(h.undo(&mut d)); assert!(h.redo(&mut d)); assert_eq!(d.layers.len(),4); }
 }
