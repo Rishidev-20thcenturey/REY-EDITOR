@@ -65,6 +65,7 @@ pub enum Command {
     SetOpacity { id: u64, opacity: u8 },
     MoveLayer { id: u64, offset: isize },
     SetVisibility { id: u64, visible: bool },
+    SetMask { id: u64, mask: Vec<u8> },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -129,6 +130,7 @@ impl Document {
             Command::SetOpacity { id, opacity } => self.set_opacity(id, opacity),
             Command::MoveLayer { id, offset } => self.move_layer(id, offset),
             Command::SetVisibility { id, visible } => { self.layer_mut(id)?.visible = visible; Ok(()) }
+            Command::SetMask { id, mask } => self.set_mask(id, mask),
         }
     }
 
