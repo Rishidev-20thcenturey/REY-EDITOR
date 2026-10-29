@@ -13,7 +13,7 @@ An original, offline-first Android image editor built from scratch for the REY p
 - Basic undo/redo snapshots
 - PNG export to app-private external storage
 
-This is an early prototype, not Photoshop parity. Masks, selections, groups, text, shapes, adjustments, filters, robust persistence, and production export are not implemented yet.
+This is an early prototype, not Photoshop parity. The Rust core now contains validated document commands, bounded history, sparse tiles, masks, selections, blend-mode math, and versioned project data. Android integration with that core is still in progress; groups, text, shapes, adjustments, filters, and production-grade format support remain future work.
 
 ## Build
 
