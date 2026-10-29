@@ -45,6 +45,8 @@ pub enum DocumentError {
     MissingLayer,
     #[error("tile is outside document bounds")]
     MissingTile,
+    #[error("mask has the wrong number of pixels")]
+    InvalidMask,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -143,6 +145,11 @@ impl Document {
         self.layer_mut(id)?.opacity = opacity; Ok(())
     }
 
+    pub fn set_mask(&mut self, id: u64, mask: Vec<u8>) -> Result<(), DocumentError> {
+        if mask.len() != (self.width as usize) * (self.height as usize) { return Err(DocumentError::InvalidMask); }
+        self.layer_mut(id)?.mask = Some(mask); Ok(())
+    }
+
     pub fn move_layer(&mut self, id: u64, offset: isize) -> Result<(), DocumentError> {
         let from = self.layers.iter().position(|l| l.id == id).ok_or(DocumentError::MissingLayer)?;
         let to = (from as isize + offset).clamp(0, self.layers.len() as isize - 1) as usize;
@@ -161,4 +168,5 @@ mod tests {
     #[test] fn commands_validate_at_one_boundary() { let mut d=Document::new(10,10).unwrap(); d.apply(Command::AddLayer { name: "Ink".into() }).unwrap(); let id=d.selected_layer; d.apply(Command::SetOpacity { id, opacity: 100 }).unwrap(); d.apply(Command::SetVisibility { id, visible: false }).unwrap(); assert_eq!(d.layers[1].opacity,100); assert!(!d.layers[1].visible); assert!(d.apply(Command::RenameLayer { id:999, name:"bad".into() }).is_err()); }
     #[test] fn sparse_tiles_allocate_only_when_touched() { let mut tiles=TileStore::new(1000,1000).unwrap(); assert_eq!(tiles.tile_count(),0); tiles.ensure_tile(2,3).unwrap(); assert_eq!(tiles.tile_count(),1); assert_eq!(tiles.ensure_tile(99,0),Err(DocumentError::MissingTile)); }
     #[test] fn history_groups_commands_and_bounds_memory() { let mut d=Document::new(10,10).unwrap(); let mut h=History::new(2); h.execute(&mut d, Command::AddLayer { name:"A".into() }).unwrap(); h.execute(&mut d, Command::AddLayer { name:"B".into() }).unwrap(); h.execute(&mut d, Command::AddLayer { name:"C".into() }).unwrap(); assert_eq!(h.undo_len(),2); assert!(h.undo(&mut d)); assert!(h.redo(&mut d)); assert_eq!(d.layers.len(),4); }
+    #[test] fn masks_are_dimension_checked() { let mut d=Document::new(4,4).unwrap(); let id=d.add_layer("Masked"); assert_eq!(d.set_mask(id, vec![0;15]), Err(DocumentError::InvalidMask)); assert!(d.set_mask(id, vec![255;16]).is_ok()); }
 }
