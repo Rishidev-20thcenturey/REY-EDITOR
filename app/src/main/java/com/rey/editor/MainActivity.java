@@ -90,6 +90,19 @@ public class MainActivity extends Activity {
         } catch (Exception error) { message("Export failed"); }
     }
 
+    private void opacityDialog() {
+        SeekBar slider = new SeekBar(this);
+        slider.setMax(100);
+        slider.setProgress(Math.round(studio.layerOpacity() * 100));
+        LinearLayout box = new LinearLayout(this);
+        box.setPadding(32, 8, 32, 0);
+        box.addView(slider, new LinearLayout.LayoutParams(-1, -2));
+        new AlertDialog.Builder(this).setTitle("Layer opacity").setView(box)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Apply", (dialog, which) -> studio.setLayerOpacity(slider.getProgress() / 100f))
+            .show();
+    }
+
     private static final class Layer {
         String name; Bitmap bitmap; boolean visible = true; float opacity = 1f;
         Layer(String name, Bitmap bitmap) { this.name = name; this.bitmap = bitmap; }
@@ -134,6 +147,8 @@ public class MainActivity extends Activity {
         private void undo() { if (undo.isEmpty()) return; redo.push(new Snapshot()); undo.pop().restore(); autosave(); }
         private void redo() { if (redo.isEmpty()) return; undo.push(new Snapshot()); redo.pop().restore(); autosave(); }
 
+        float layerOpacity() { return layers.get(selected).opacity; }
+        void setLayerOpacity(float value) { checkpoint(); layers.get(selected).opacity = Math.max(0f, Math.min(1f, value)); autosave(); invalidate(); }
         private void addLayer() { checkpoint(); Bitmap b = Bitmap.createBitmap(base.getWidth(), base.getHeight(), Bitmap.Config.ARGB_8888); layers.add(new Layer("Layer " + (layers.size() + 1), b)); selected = layers.size() - 1; autosave(); invalidate(); }
         private void duplicateLayer() { if (layers.isEmpty()) return; checkpoint(); Layer source = layers.get(selected); layers.add(selected + 1, new Layer(source.name + " copy", source.bitmap.copy(Bitmap.Config.ARGB_8888, true))); selected++; autosave(); invalidate(); }
         private void deleteLayer() { if (layers.size() <= 1) { message("A document needs one layer"); return; } checkpoint(); layers.remove(selected); selected = Math.min(selected, layers.size() - 1); autosave(); invalidate(); }
@@ -158,7 +173,7 @@ public class MainActivity extends Activity {
             text(canvas, "REY EDITOR", 16, 28, Color.WHITE, 18); button(canvas, "New", 106, 28, 56); button(canvas, "Import", 168, 28, 68); button(canvas, "Export", 242, 28, 70); button(canvas, "Undo", 316, 28, 60); button(canvas, "Redo", 380, 28, 60);
             text(canvas, "TOOLS", 17, 82, Color.LTGRAY, 10); tool(canvas, "B", 16, 110, TOOL_BRUSH); tool(canvas, "E", 16, 158, TOOL_ERASER); tool(canvas, "I", 16, 206, TOOL_EYEDROPPER); tool(canvas, "H", 16, 254, TOOL_HAND);
             text(canvas, "LAYERS", getWidth() - 250, 84, Color.LTGRAY, 11); button(canvas, "+", getWidth() - 60, 82, 36);
-            button(canvas, "Dup", getWidth() - 250, 112, 48); button(canvas, "Del", getWidth() - 198, 112, 48); button(canvas, "Up", getWidth() - 144, 112, 48); button(canvas, "Down", getWidth() - 90, 112, 54);
+            button(canvas, "Dup", getWidth() - 250, 112, 48); button(canvas, "Del", getWidth() - 198, 112, 48); button(canvas, "Up", getWidth() - 144, 112, 48); button(canvas, "Down", getWidth() - 90, 112, 54); button(canvas, "Opacity", getWidth() - 250, 145, 78);
             for (int i = layers.size() - 1; i >= 0; i--) { Layer layer = layers.get(i); float y = 166 + (layers.size() - 1 - i) * 52; paint.setColor(i == selected ? Color.rgb(58, 74, 108) : Color.rgb(31, 37, 50)); canvas.drawRoundRect(getWidth() - 260, y - 22, getWidth() - 10, y + 21, 8, 8, paint); text(canvas, layer.visible ? "●" : "○", getWidth() - 248, y + 5, Color.WHITE, 15); text(canvas, layer.name, getWidth() - 222, y + 1, Color.WHITE, 12); text(canvas, Math.round(layer.opacity * 100) + "%", getWidth() - 222, y + 17, Color.LTGRAY, 10); }
             text(canvas, "Tool: " + toolName(), 78, getHeight() - 8, Color.LTGRAY, 11); text(canvas, Math.round(zoom * 100) + "%", getWidth() - 90, getHeight() - 8, Color.LTGRAY, 11);
         }
@@ -174,7 +189,7 @@ public class MainActivity extends Activity {
                 lastX = x; lastY = y;
                 if (y < 56) { if (x > 100 && x < 162) newDocumentDialog(); else if (x < 236 && x > 162) importPng(); else if (x < 316 && x > 236) exportPng(); else if (x < 376 && x > 316) undo(); else if (x < 445 && x > 376) redo(); return true; }
                 if (x < 64 && y > 80) { int id = Math.max(0, Math.min(3, (int)((y - 90) / 48))); tool = id; invalidate(); return true; }
-                if (x > getWidth() - 270) { if (y < 108 && x > getWidth() - 80) addLayer(); else if (y > 108 && y < 145) { if (x > getWidth() - 252 && x < getWidth() - 198) duplicateLayer(); else if (x < getWidth() - 144) deleteLayer(); else if (x < getWidth() - 85) moveLayer(1); else moveLayer(-1); } else if (y > 145) { int row = (int)((y - 145) / 52); int index = layers.size() - 1 - row; if (index >= 0 && index < layers.size()) { if (x < getWidth() - 220) { selected = index; invalidate(); } else { selected = index; toggleVisibility(); } } } return true; }
+                if (x > getWidth() - 270) { if (y < 108 && x > getWidth() - 80) addLayer(); else if (y >= 140 && y < 176 && x < getWidth() - 170) { opacityDialog(); } else if (y > 108 && y < 140) { if (x > getWidth() - 252 && x < getWidth() - 198) duplicateLayer(); else if (x < getWidth() - 144) deleteLayer(); else if (x < getWidth() - 85) moveLayer(1); else moveLayer(-1); } else if (y > 176) { int row = (int)((y - 145) / 52); int index = layers.size() - 1 - row; if (index >= 0 && index < layers.size()) { if (x < getWidth() - 220) { selected = index; invalidate(); } else { selected = index; toggleVisibility(); } } } return true; }
                 if (tool == TOOL_HAND) { panning = true; return true; }
                 if (!canvasRect().contains(x, y)) return true;
                 if (tool == TOOL_EYEDROPPER) { int ix = Math.round(imageX(x)), iy = Math.round(imageY(y)); if (ix >= 0 && iy >= 0 && ix < base.getWidth() && iy < base.getHeight()) foreground = composite().getPixel(ix, iy); message("Color sampled"); return true; }
