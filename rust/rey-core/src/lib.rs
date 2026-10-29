@@ -134,6 +134,25 @@ pub struct Selection {
     pub y: u32,
     pub width: u32,
     pub height: u32,
+    pub feather: u16,
+}
+
+impl Selection {
+    pub fn clipped(self, document_width: u32, document_height: u32) -> Self {
+        let x = self.x.min(document_width);
+        let y = self.y.min(document_height);
+        Self {
+            x,
+            y,
+            width: self.width.min(document_width.saturating_sub(x)),
+            height: self.height.min(document_height.saturating_sub(y)),
+            feather: self.feather,
+        }
+    }
+
+    pub fn area(&self) -> u64 {
+        u64::from(self.width) * u64::from(self.height)
+    }
 }
 
 impl Selection {
@@ -385,6 +404,20 @@ mod tests {
         let id = d.add_layer("Masked");
         assert_eq!(d.set_mask(id, vec![0; 15]), Err(DocumentError::InvalidMask));
         assert!(d.set_mask(id, vec![255; 16]).is_ok());
+    }
+    #[test]
+    fn selections_clip_and_report_area() {
+        let selection = Selection {
+            x: 90,
+            y: 90,
+            width: 30,
+            height: 20,
+            feather: 4,
+        }
+        .clipped(100, 100);
+        assert_eq!(selection.area(), 100);
+        assert!(selection.contains(95, 95));
+        assert!(!selection.contains(10, 10));
     }
     #[test]
     fn tile_pixels_are_sparse_and_bounded() {
