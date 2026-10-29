@@ -16,20 +16,38 @@ pub struct TileStore {
 
 impl TileStore {
     pub fn new(width: u32, height: u32) -> Result<Self, DocumentError> {
-        if width == 0 || height == 0 { return Err(DocumentError::InvalidDimensions); }
-        if u64::from(width) * u64::from(height) > MAX_DOCUMENT_PIXELS { return Err(DocumentError::TooLarge); }
-        Ok(Self { width, height, tiles: BTreeMap::new() })
+        if width == 0 || height == 0 {
+            return Err(DocumentError::InvalidDimensions);
+        }
+        if u64::from(width) * u64::from(height) > MAX_DOCUMENT_PIXELS {
+            return Err(DocumentError::TooLarge);
+        }
+        Ok(Self {
+            width,
+            height,
+            tiles: BTreeMap::new(),
+        })
     }
 
-    pub fn tile_count(&self) -> usize { self.tiles.len() }
-    pub fn dimensions(&self) -> (u32, u32) { (self.width, self.height) }
+    pub fn tile_count(&self) -> usize {
+        self.tiles.len()
+    }
+    pub fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
 
-    pub fn tile(&self, tile_x: u32, tile_y: u32) -> Option<&[u8]> { self.tiles.get(&(tile_x, tile_y)).map(Vec::as_slice) }
+    pub fn tile(&self, tile_x: u32, tile_y: u32) -> Option<&[u8]> {
+        self.tiles.get(&(tile_x, tile_y)).map(Vec::as_slice)
+    }
 
     pub fn set_rgba(&mut self, x: u32, y: u32, pixel: [u8; 4]) -> Result<(), DocumentError> {
-        if x >= self.width || y >= self.height { return Err(DocumentError::MissingTile); }
-        let tx = x / TILE_SIZE; let ty = y / TILE_SIZE;
-        let local_x = x % TILE_SIZE; let local_y = y % TILE_SIZE;
+        if x >= self.width || y >= self.height {
+            return Err(DocumentError::MissingTile);
+        }
+        let tx = x / TILE_SIZE;
+        let ty = y / TILE_SIZE;
+        let local_x = x % TILE_SIZE;
+        let local_y = y % TILE_SIZE;
         let stride = self.width.saturating_sub(tx * TILE_SIZE).min(TILE_SIZE);
         let tile = self.ensure_tile(tx, ty)?;
         let offset = ((local_y * stride + local_x) * 4) as usize;
@@ -40,13 +58,18 @@ impl TileStore {
     pub fn ensure_tile(&mut self, tile_x: u32, tile_y: u32) -> Result<&mut [u8], DocumentError> {
         let max_x = self.width.div_ceil(TILE_SIZE);
         let max_y = self.height.div_ceil(TILE_SIZE);
-        if tile_x >= max_x || tile_y >= max_y { return Err(DocumentError::MissingTile); }
+        if tile_x >= max_x || tile_y >= max_y {
+            return Err(DocumentError::MissingTile);
+        }
         let w = (self.width - tile_x * TILE_SIZE).min(TILE_SIZE);
         let h = (self.height - tile_y * TILE_SIZE).min(TILE_SIZE);
-        Ok(self.tiles.entry((tile_x, tile_y)).or_insert_with(|| vec![0; (w * h * 4) as usize]).as_mut_slice())
+        Ok(self
+            .tiles
+            .entry((tile_x, tile_y))
+            .or_insert_with(|| vec![0; (w * h * 4) as usize])
+            .as_mut_slice())
     }
 }
-
 
 #[derive(Debug, Error, PartialEq)]
 pub enum DocumentError {
@@ -82,14 +105,28 @@ pub enum Command {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Selection { pub x: u32, pub y: u32, pub width: u32, pub height: u32 }
+pub struct Selection {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
 
 impl Selection {
-    pub fn contains(&self, x: u32, y: u32) -> bool { x >= self.x && y >= self.y && x < self.x.saturating_add(self.width) && y < self.y.saturating_add(self.height) }
+    pub fn contains(&self, x: u32, y: u32) -> bool {
+        x >= self.x
+            && y >= self.y
+            && x < self.x.saturating_add(self.width)
+            && y < self.y.saturating_add(self.height)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub enum Adjustment { Brightness { amount: i16 }, Contrast { amount: i16 }, Saturation { amount: i16 } }
+pub enum Adjustment {
+    Brightness { amount: i16 },
+    Contrast { amount: i16 },
+    Saturation { amount: i16 },
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct History {
@@ -99,24 +136,48 @@ pub struct History {
 }
 
 impl History {
-    pub fn new(limit: usize) -> Self { Self { undo: Vec::new(), redo: Vec::new(), limit: limit.max(1) } }
-    pub fn undo_len(&self) -> usize { self.undo.len() }
-    pub fn redo_len(&self) -> usize { self.redo.len() }
-    pub fn execute(&mut self, document: &mut Document, command: Command) -> Result<(), DocumentError> {
+    pub fn new(limit: usize) -> Self {
+        Self {
+            undo: Vec::new(),
+            redo: Vec::new(),
+            limit: limit.max(1),
+        }
+    }
+    pub fn undo_len(&self) -> usize {
+        self.undo.len()
+    }
+    pub fn redo_len(&self) -> usize {
+        self.redo.len()
+    }
+    pub fn execute(
+        &mut self,
+        document: &mut Document,
+        command: Command,
+    ) -> Result<(), DocumentError> {
         let before = document.clone();
         document.apply(command)?;
         self.undo.push(before);
-        if self.undo.len() > self.limit { self.undo.remove(0); }
+        if self.undo.len() > self.limit {
+            self.undo.remove(0);
+        }
         self.redo.clear();
         Ok(())
     }
     pub fn undo(&mut self, document: &mut Document) -> bool {
-        let Some(previous) = self.undo.pop() else { return false };
-        self.redo.push(document.clone()); *document = previous; true
+        let Some(previous) = self.undo.pop() else {
+            return false;
+        };
+        self.redo.push(document.clone());
+        *document = previous;
+        true
     }
     pub fn redo(&mut self, document: &mut Document) -> bool {
-        let Some(next) = self.redo.pop() else { return false };
-        self.undo.push(document.clone()); *document = next; true
+        let Some(next) = self.redo.pop() else {
+            return false;
+        };
+        self.undo.push(document.clone());
+        *document = next;
+        true
     }
 }
 
@@ -131,58 +192,175 @@ pub struct Document {
 
 impl Document {
     pub fn new(width: u32, height: u32) -> Result<Self, DocumentError> {
-        if width == 0 || height == 0 { return Err(DocumentError::InvalidDimensions); }
-        if u64::from(width) * u64::from(height) > MAX_DOCUMENT_PIXELS { return Err(DocumentError::TooLarge); }
-        Ok(Self { width, height, layers: vec![Layer { id: 1, name: "Background".into(), visible: true, opacity: 255, mask: None }], selected_layer: 1, next_id: 2 })
+        if width == 0 || height == 0 {
+            return Err(DocumentError::InvalidDimensions);
+        }
+        if u64::from(width) * u64::from(height) > MAX_DOCUMENT_PIXELS {
+            return Err(DocumentError::TooLarge);
+        }
+        Ok(Self {
+            width,
+            height,
+            layers: vec![Layer {
+                id: 1,
+                name: "Background".into(),
+                visible: true,
+                opacity: 255,
+                mask: None,
+            }],
+            selected_layer: 1,
+            next_id: 2,
+        })
     }
 
     pub fn apply(&mut self, command: Command) -> Result<(), DocumentError> {
         match command {
-            Command::AddLayer { name } => { self.add_layer(name); Ok(()) }
+            Command::AddLayer { name } => {
+                self.add_layer(name);
+                Ok(())
+            }
             Command::RenameLayer { id, name } => self.rename_layer(id, name),
             Command::SetOpacity { id, opacity } => self.set_opacity(id, opacity),
             Command::MoveLayer { id, offset } => self.move_layer(id, offset),
-            Command::SetVisibility { id, visible } => { self.layer_mut(id)?.visible = visible; Ok(()) }
+            Command::SetVisibility { id, visible } => {
+                self.layer_mut(id)?.visible = visible;
+                Ok(())
+            }
             Command::SetMask { id, mask } => self.set_mask(id, mask),
         }
     }
 
     pub fn add_layer(&mut self, name: impl Into<String>) -> u64 {
-        let id = self.next_id; self.next_id += 1;
-        self.layers.push(Layer { id, name: name.into(), visible: true, opacity: 255, mask: None }); self.selected_layer = id; id
+        let id = self.next_id;
+        self.next_id += 1;
+        self.layers.push(Layer {
+            id,
+            name: name.into(),
+            visible: true,
+            opacity: 255,
+            mask: None,
+        });
+        self.selected_layer = id;
+        id
     }
 
     pub fn rename_layer(&mut self, id: u64, name: impl Into<String>) -> Result<(), DocumentError> {
-        self.layer_mut(id)?.name = name.into(); Ok(())
+        self.layer_mut(id)?.name = name.into();
+        Ok(())
     }
 
     pub fn set_opacity(&mut self, id: u64, opacity: u8) -> Result<(), DocumentError> {
-        self.layer_mut(id)?.opacity = opacity; Ok(())
+        self.layer_mut(id)?.opacity = opacity;
+        Ok(())
     }
 
     pub fn set_mask(&mut self, id: u64, mask: Vec<u8>) -> Result<(), DocumentError> {
-        if mask.len() != (self.width as usize) * (self.height as usize) { return Err(DocumentError::InvalidMask); }
-        self.layer_mut(id)?.mask = Some(mask); Ok(())
+        if mask.len() != (self.width as usize) * (self.height as usize) {
+            return Err(DocumentError::InvalidMask);
+        }
+        self.layer_mut(id)?.mask = Some(mask);
+        Ok(())
     }
 
     pub fn move_layer(&mut self, id: u64, offset: isize) -> Result<(), DocumentError> {
-        let from = self.layers.iter().position(|l| l.id == id).ok_or(DocumentError::MissingLayer)?;
+        let from = self
+            .layers
+            .iter()
+            .position(|l| l.id == id)
+            .ok_or(DocumentError::MissingLayer)?;
         let to = (from as isize + offset).clamp(0, self.layers.len() as isize - 1) as usize;
-        let layer = self.layers.remove(from); self.layers.insert(to, layer); Ok(())
+        let layer = self.layers.remove(from);
+        self.layers.insert(to, layer);
+        Ok(())
     }
 
-    fn layer_mut(&mut self, id: u64) -> Result<&mut Layer, DocumentError> { self.layers.iter_mut().find(|l| l.id == id).ok_or(DocumentError::MissingLayer) }
+    fn layer_mut(&mut self, id: u64) -> Result<&mut Layer, DocumentError> {
+        self.layers
+            .iter_mut()
+            .find(|l| l.id == id)
+            .ok_or(DocumentError::MissingLayer)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test] fn validates_dimensions() { assert_eq!(Document::new(0, 1), Err(DocumentError::InvalidDimensions)); assert_eq!(Document::new(12_001, 12_001), Err(DocumentError::TooLarge)); }
-    #[test] fn layer_commands_preserve_stable_ids() { let mut d=Document::new(10,10).unwrap(); let id=d.add_layer("Paint"); d.rename_layer(id,"Ink").unwrap(); d.set_opacity(id,128).unwrap(); d.move_layer(id,-1).unwrap(); assert_eq!(d.layers.iter().find(|l|l.id==id).unwrap().name,"Ink"); assert_eq!(d.layers.iter().find(|l|l.id==id).unwrap().opacity,128); }
-    #[test] fn project_serializes() { let d=Document::new(10,10).unwrap(); let json=serde_json::to_string(&d).unwrap(); let copy:Document=serde_json::from_str(&json).unwrap(); assert_eq!(d,copy); }
-    #[test] fn commands_validate_at_one_boundary() { let mut d=Document::new(10,10).unwrap(); d.apply(Command::AddLayer { name: "Ink".into() }).unwrap(); let id=d.selected_layer; d.apply(Command::SetOpacity { id, opacity: 100 }).unwrap(); d.apply(Command::SetVisibility { id, visible: false }).unwrap(); assert_eq!(d.layers[1].opacity,100); assert!(!d.layers[1].visible); assert!(d.apply(Command::RenameLayer { id:999, name:"bad".into() }).is_err()); }
-    #[test] fn sparse_tiles_allocate_only_when_touched() { let mut tiles=TileStore::new(1000,1000).unwrap(); assert_eq!(tiles.tile_count(),0); tiles.ensure_tile(2,3).unwrap(); assert_eq!(tiles.tile_count(),1); assert_eq!(tiles.ensure_tile(99,0),Err(DocumentError::MissingTile)); }
-    #[test] fn history_groups_commands_and_bounds_memory() { let mut d=Document::new(10,10).unwrap(); let mut h=History::new(2); h.execute(&mut d, Command::AddLayer { name:"A".into() }).unwrap(); h.execute(&mut d, Command::AddLayer { name:"B".into() }).unwrap(); h.execute(&mut d, Command::AddLayer { name:"C".into() }).unwrap(); assert_eq!(h.undo_len(),2); assert!(h.undo(&mut d)); assert!(h.redo(&mut d)); assert_eq!(d.layers.len(),4); }
-    #[test] fn masks_are_dimension_checked() { let mut d=Document::new(4,4).unwrap(); let id=d.add_layer("Masked"); assert_eq!(d.set_mask(id, vec![0;15]), Err(DocumentError::InvalidMask)); assert!(d.set_mask(id, vec![255;16]).is_ok()); }
-    #[test] fn tile_pixels_are_sparse_and_bounded() { let mut t=TileStore::new(300,300).unwrap(); assert_eq!(t.tile_count(),0); t.set_rgba(256,256,[1,2,3,4]).unwrap(); assert_eq!(t.tile_count(),1); assert_eq!(&t.tile(1,1).unwrap()[0..4],[1,2,3,4]); assert!(t.set_rgba(300,0,[0;4]).is_err()); }
+    #[test]
+    fn validates_dimensions() {
+        assert_eq!(Document::new(0, 1), Err(DocumentError::InvalidDimensions));
+        assert_eq!(Document::new(12_001, 12_001), Err(DocumentError::TooLarge));
+    }
+    #[test]
+    fn layer_commands_preserve_stable_ids() {
+        let mut d = Document::new(10, 10).unwrap();
+        let id = d.add_layer("Paint");
+        d.rename_layer(id, "Ink").unwrap();
+        d.set_opacity(id, 128).unwrap();
+        d.move_layer(id, -1).unwrap();
+        assert_eq!(d.layers.iter().find(|l| l.id == id).unwrap().name, "Ink");
+        assert_eq!(d.layers.iter().find(|l| l.id == id).unwrap().opacity, 128);
+    }
+    #[test]
+    fn project_serializes() {
+        let d = Document::new(10, 10).unwrap();
+        let json = serde_json::to_string(&d).unwrap();
+        let copy: Document = serde_json::from_str(&json).unwrap();
+        assert_eq!(d, copy);
+    }
+    #[test]
+    fn commands_validate_at_one_boundary() {
+        let mut d = Document::new(10, 10).unwrap();
+        d.apply(Command::AddLayer { name: "Ink".into() }).unwrap();
+        let id = d.selected_layer;
+        d.apply(Command::SetOpacity { id, opacity: 100 }).unwrap();
+        d.apply(Command::SetVisibility { id, visible: false })
+            .unwrap();
+        assert_eq!(d.layers[1].opacity, 100);
+        assert!(!d.layers[1].visible);
+        assert!(d
+            .apply(Command::RenameLayer {
+                id: 999,
+                name: "bad".into()
+            })
+            .is_err());
+    }
+    #[test]
+    fn sparse_tiles_allocate_only_when_touched() {
+        let mut tiles = TileStore::new(1000, 1000).unwrap();
+        assert_eq!(tiles.tile_count(), 0);
+        tiles.ensure_tile(2, 3).unwrap();
+        assert_eq!(tiles.tile_count(), 1);
+        assert_eq!(tiles.ensure_tile(99, 0), Err(DocumentError::MissingTile));
+    }
+    #[test]
+    fn history_groups_commands_and_bounds_memory() {
+        let mut d = Document::new(10, 10).unwrap();
+        let mut h = History::new(2);
+        h.execute(&mut d, Command::AddLayer { name: "A".into() })
+            .unwrap();
+        h.execute(&mut d, Command::AddLayer { name: "B".into() })
+            .unwrap();
+        h.execute(&mut d, Command::AddLayer { name: "C".into() })
+            .unwrap();
+        assert_eq!(h.undo_len(), 2);
+        assert!(h.undo(&mut d));
+        assert!(h.redo(&mut d));
+        assert_eq!(d.layers.len(), 4);
+    }
+    #[test]
+    fn masks_are_dimension_checked() {
+        let mut d = Document::new(4, 4).unwrap();
+        let id = d.add_layer("Masked");
+        assert_eq!(d.set_mask(id, vec![0; 15]), Err(DocumentError::InvalidMask));
+        assert!(d.set_mask(id, vec![255; 16]).is_ok());
+    }
+    #[test]
+    fn tile_pixels_are_sparse_and_bounded() {
+        let mut t = TileStore::new(300, 300).unwrap();
+        assert_eq!(t.tile_count(), 0);
+        t.set_rgba(256, 256, [1, 2, 3, 4]).unwrap();
+        assert_eq!(t.tile_count(), 1);
+        assert_eq!(&t.tile(1, 1).unwrap()[0..4], [1, 2, 3, 4]);
+        assert!(t.set_rgba(300, 0, [0; 4]).is_err());
+    }
 }
