@@ -1,0 +1,69 @@
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+pub const MAX_DOCUMENT_PIXELS: u64 = 144_000_000;
+
+#[derive(Debug, Error, PartialEq)]
+pub enum DocumentError {
+    #[error("document dimensions must be positive")]
+    InvalidDimensions,
+    #[error("document is too large")]
+    TooLarge,
+    #[error("layer does not exist")]
+    MissingLayer,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Layer {
+    pub id: u64,
+    pub name: String,
+    pub visible: bool,
+    pub opacity: u8,
+    pub mask: Option<Vec<u8>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Document {
+    pub width: u32,
+    pub height: u32,
+    pub layers: Vec<Layer>,
+    pub selected_layer: u64,
+    next_id: u64,
+}
+
+impl Document {
+    pub fn new(width: u32, height: u32) -> Result<Self, DocumentError> {
+        if width == 0 || height == 0 { return Err(DocumentError::InvalidDimensions); }
+        if u64::from(width) * u64::from(height) > MAX_DOCUMENT_PIXELS { return Err(DocumentError::TooLarge); }
+        Ok(Self { width, height, layers: vec![Layer { id: 1, name: "Background".into(), visible: true, opacity: 255, mask: None }], selected_layer: 1, next_id: 2 })
+    }
+
+    pub fn add_layer(&mut self, name: impl Into<String>) -> u64 {
+        let id = self.next_id; self.next_id += 1;
+        self.layers.push(Layer { id, name: name.into(), visible: true, opacity: 255, mask: None }); self.selected_layer = id; id
+    }
+
+    pub fn rename_layer(&mut self, id: u64, name: impl Into<String>) -> Result<(), DocumentError> {
+        self.layer_mut(id)?.name = name.into(); Ok(())
+    }
+
+    pub fn set_opacity(&mut self, id: u64, opacity: u8) -> Result<(), DocumentError> {
+        self.layer_mut(id)?.opacity = opacity; Ok(())
+    }
+
+    pub fn move_layer(&mut self, id: u64, offset: isize) -> Result<(), DocumentError> {
+        let from = self.layers.iter().position(|l| l.id == id).ok_or(DocumentError::MissingLayer)?;
+        let to = (from as isize + offset).clamp(0, self.layers.len() as isize - 1) as usize;
+        let layer = self.layers.remove(from); self.layers.insert(to, layer); Ok(())
+    }
+
+    fn layer_mut(&mut self, id: u64) -> Result<&mut Layer, DocumentError> { self.layers.iter_mut().find(|l| l.id == id).ok_or(DocumentError::MissingLayer) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test] fn validates_dimensions() { assert_eq!(Document::new(0, 1), Err(DocumentError::InvalidDimensions)); assert_eq!(Document::new(12_001, 12_001), Err(DocumentError::TooLarge)); }
+    #[test] fn layer_commands_preserve_stable_ids() { let mut d=Document::new(10,10).unwrap(); let id=d.add_layer("Paint"); d.rename_layer(id,"Ink").unwrap(); d.set_opacity(id,128).unwrap(); d.move_layer(id,-1).unwrap(); assert_eq!(d.layers.iter().find(|l|l.id==id).unwrap().name,"Ink"); assert_eq!(d.layers.iter().find(|l|l.id==id).unwrap().opacity,128); }
+    #[test] fn project_serializes() { let d=Document::new(10,10).unwrap(); let json=serde_json::to_string(&d).unwrap(); let copy:Document=serde_json::from_str(&json).unwrap(); assert_eq!(d,copy); }
+}

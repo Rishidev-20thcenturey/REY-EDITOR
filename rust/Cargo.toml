@@ -1,0 +1,3 @@
+[workspace]
+members = ["rey-core"]
+resolver = "2"

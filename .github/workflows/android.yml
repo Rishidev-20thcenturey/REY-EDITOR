@@ -21,6 +21,8 @@ jobs:
           "$SDKMANAGER" --sdk_root="$SDK" "platforms;android-35" "build-tools;35.0.0"
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+      - name: Test Rust document core
+        run: cargo test --manifest-path rust/Cargo.toml
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: '8.9' }
       - run: gradle :app:assembleDebug --no-daemon
