@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
+pub mod render;
+
 pub const MAX_DOCUMENT_PIXELS: u64 = 144_000_000;
 pub const TILE_SIZE: u32 = 256;
 
