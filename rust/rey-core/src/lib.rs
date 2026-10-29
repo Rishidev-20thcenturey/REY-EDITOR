@@ -1,7 +1,37 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use thiserror::Error;
 
 pub const MAX_DOCUMENT_PIXELS: u64 = 144_000_000;
+pub const TILE_SIZE: u32 = 256;
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct TileStore {
+    width: u32,
+    height: u32,
+    tiles: BTreeMap<(u32, u32), Vec<u8>>,
+}
+
+impl TileStore {
+    pub fn new(width: u32, height: u32) -> Result<Self, DocumentError> {
+        if width == 0 || height == 0 { return Err(DocumentError::InvalidDimensions); }
+        if u64::from(width) * u64::from(height) > MAX_DOCUMENT_PIXELS { return Err(DocumentError::TooLarge); }
+        Ok(Self { width, height, tiles: BTreeMap::new() })
+    }
+
+    pub fn tile_count(&self) -> usize { self.tiles.len() }
+    pub fn dimensions(&self) -> (u32, u32) { (self.width, self.height) }
+
+    pub fn ensure_tile(&mut self, tile_x: u32, tile_y: u32) -> Result<&mut [u8], DocumentError> {
+        let max_x = self.width.div_ceil(TILE_SIZE);
+        let max_y = self.height.div_ceil(TILE_SIZE);
+        if tile_x >= max_x || tile_y >= max_y { return Err(DocumentError::MissingTile); }
+        let w = (self.width - tile_x * TILE_SIZE).min(TILE_SIZE);
+        let h = (self.height - tile_y * TILE_SIZE).min(TILE_SIZE);
+        Ok(self.tiles.entry((tile_x, tile_y)).or_insert_with(|| vec![0; (w * h * 4) as usize]).as_mut_slice())
+    }
+}
+
 
 #[derive(Debug, Error, PartialEq)]
 pub enum DocumentError {
@@ -11,6 +41,8 @@ pub enum DocumentError {
     TooLarge,
     #[error("layer does not exist")]
     MissingLayer,
+    #[error("tile is outside document bounds")]
+    MissingTile,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -86,4 +118,5 @@ mod tests {
     #[test] fn layer_commands_preserve_stable_ids() { let mut d=Document::new(10,10).unwrap(); let id=d.add_layer("Paint"); d.rename_layer(id,"Ink").unwrap(); d.set_opacity(id,128).unwrap(); d.move_layer(id,-1).unwrap(); assert_eq!(d.layers.iter().find(|l|l.id==id).unwrap().name,"Ink"); assert_eq!(d.layers.iter().find(|l|l.id==id).unwrap().opacity,128); }
     #[test] fn project_serializes() { let d=Document::new(10,10).unwrap(); let json=serde_json::to_string(&d).unwrap(); let copy:Document=serde_json::from_str(&json).unwrap(); assert_eq!(d,copy); }
     #[test] fn commands_validate_at_one_boundary() { let mut d=Document::new(10,10).unwrap(); d.apply(Command::AddLayer { name: "Ink".into() }).unwrap(); let id=d.selected_layer; d.apply(Command::SetOpacity { id, opacity: 100 }).unwrap(); d.apply(Command::SetVisibility { id, visible: false }).unwrap(); assert_eq!(d.layers[1].opacity,100); assert!(!d.layers[1].visible); assert!(d.apply(Command::RenameLayer { id:999, name:"bad".into() }).is_err()); }
+    #[test] fn sparse_tiles_allocate_only_when_touched() { let mut tiles=TileStore::new(1000,1000).unwrap(); assert_eq!(tiles.tile_count(),0); tiles.ensure_tile(2,3).unwrap(); assert_eq!(tiles.tile_count(),1); assert_eq!(tiles.ensure_tile(99,0),Err(DocumentError::MissingTile)); }
 }
