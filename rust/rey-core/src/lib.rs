@@ -23,6 +23,15 @@ pub struct Layer {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum Command {
+    AddLayer { name: String },
+    RenameLayer { id: u64, name: String },
+    SetOpacity { id: u64, opacity: u8 },
+    MoveLayer { id: u64, offset: isize },
+    SetVisibility { id: u64, visible: bool },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Document {
     pub width: u32,
     pub height: u32,
@@ -36,6 +45,16 @@ impl Document {
         if width == 0 || height == 0 { return Err(DocumentError::InvalidDimensions); }
         if u64::from(width) * u64::from(height) > MAX_DOCUMENT_PIXELS { return Err(DocumentError::TooLarge); }
         Ok(Self { width, height, layers: vec![Layer { id: 1, name: "Background".into(), visible: true, opacity: 255, mask: None }], selected_layer: 1, next_id: 2 })
+    }
+
+    pub fn apply(&mut self, command: Command) -> Result<(), DocumentError> {
+        match command {
+            Command::AddLayer { name } => { self.add_layer(name); Ok(()) }
+            Command::RenameLayer { id, name } => self.rename_layer(id, name),
+            Command::SetOpacity { id, opacity } => self.set_opacity(id, opacity),
+            Command::MoveLayer { id, offset } => self.move_layer(id, offset),
+            Command::SetVisibility { id, visible } => { self.layer_mut(id)?.visible = visible; Ok(()) }
+        }
     }
 
     pub fn add_layer(&mut self, name: impl Into<String>) -> u64 {
@@ -66,4 +85,5 @@ mod tests {
     #[test] fn validates_dimensions() { assert_eq!(Document::new(0, 1), Err(DocumentError::InvalidDimensions)); assert_eq!(Document::new(12_001, 12_001), Err(DocumentError::TooLarge)); }
     #[test] fn layer_commands_preserve_stable_ids() { let mut d=Document::new(10,10).unwrap(); let id=d.add_layer("Paint"); d.rename_layer(id,"Ink").unwrap(); d.set_opacity(id,128).unwrap(); d.move_layer(id,-1).unwrap(); assert_eq!(d.layers.iter().find(|l|l.id==id).unwrap().name,"Ink"); assert_eq!(d.layers.iter().find(|l|l.id==id).unwrap().opacity,128); }
     #[test] fn project_serializes() { let d=Document::new(10,10).unwrap(); let json=serde_json::to_string(&d).unwrap(); let copy:Document=serde_json::from_str(&json).unwrap(); assert_eq!(d,copy); }
+    #[test] fn commands_validate_at_one_boundary() { let mut d=Document::new(10,10).unwrap(); d.apply(Command::AddLayer { name: "Ink".into() }).unwrap(); let id=d.selected_layer; d.apply(Command::SetOpacity { id, opacity: 100 }).unwrap(); d.apply(Command::SetVisibility { id, visible: false }).unwrap(); assert_eq!(d.layers[1].opacity,100); assert!(!d.layers[1].visible); assert!(d.apply(Command::RenameLayer { id:999, name:"bad".into() }).is_err()); }
 }
