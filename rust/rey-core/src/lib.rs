@@ -66,6 +66,16 @@ pub enum Command {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Selection { pub x: u32, pub y: u32, pub width: u32, pub height: u32 }
+
+impl Selection {
+    pub fn contains(&self, x: u32, y: u32) -> bool { x >= self.x && y >= self.y && x < self.x.saturating_add(self.width) && y < self.y.saturating_add(self.height) }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum Adjustment { Brightness { amount: i16 }, Contrast { amount: i16 }, Saturation { amount: i16 } }
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct History {
     undo: Vec<Document>,
     redo: Vec<Document>,
