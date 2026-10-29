@@ -27,10 +27,18 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 
 public class MainActivity extends Activity {
+    static { System.loadLibrary("rey_core"); }
+    private long nativeDocument;
     private StudioView studio;
+    private static native long nativeCreateDocument(int width, int height);
+    private static native void nativeDestroyDocument(long handle);
+    private static native int nativeLayerCount(long handle);
+    private static native int nativeAddLayer(long handle);
+    private static native int nativeSetOpacity(long handle, int opacity);
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        nativeDocument = nativeCreateDocument(1200, 800);
         studio = new StudioView(this);
         setContentView(studio);
         studio.restoreAutosave();
@@ -55,6 +63,7 @@ public class MainActivity extends Activity {
         }
     }
 
+    @Override protected void onDestroy() { if (nativeDocument != 0) { nativeDestroyDocument(nativeDocument); nativeDocument = 0; } super.onDestroy(); }
     private void message(String value) { Toast.makeText(this, value, Toast.LENGTH_SHORT).show(); }
 
     private void newDocumentDialog() {
@@ -99,7 +108,7 @@ public class MainActivity extends Activity {
         box.addView(slider, new LinearLayout.LayoutParams(-1, -2));
         new AlertDialog.Builder(this).setTitle("Layer opacity").setView(box)
             .setNegativeButton("Cancel", null)
-            .setPositiveButton("Apply", (dialog, which) -> studio.setLayerOpacity(slider.getProgress() / 100f))
+            .setPositiveButton("Apply", (dialog, which) -> { studio.setLayerOpacity(slider.getProgress() / 100f); nativeSetOpacity(nativeDocument, slider.getProgress() * 255 / 100); })
             .show();
     }
 

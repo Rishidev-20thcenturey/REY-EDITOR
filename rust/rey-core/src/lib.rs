@@ -1,8 +1,83 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::ffi::c_void;
 use thiserror::Error;
 
 pub mod render;
+
+#[no_mangle]
+pub extern "C" fn Java_com_rey_editor_MainActivity_nativeCreateDocument(
+    _env: *mut c_void,
+    _activity: *mut c_void,
+    width: i32,
+    height: i32,
+) -> i64 {
+    Document::new(width.max(0) as u32, height.max(0) as u32)
+        .map(|document| Box::into_raw(Box::new((document, History::new(100)))) as i64)
+        .unwrap_or(0)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_rey_editor_MainActivity_nativeDestroyDocument(
+    _env: *mut c_void,
+    _activity: *mut c_void,
+    handle: i64,
+) {
+    if handle != 0 {
+        drop(Box::from_raw(handle as *mut (Document, History)));
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_rey_editor_MainActivity_nativeLayerCount(
+    _env: *mut c_void,
+    _activity: *mut c_void,
+    handle: i64,
+) -> i32 {
+    (handle as *mut (Document, History))
+        .as_ref()
+        .map(|state| state.0.layers.len() as i32)
+        .unwrap_or(0)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_rey_editor_MainActivity_nativeAddLayer(
+    _env: *mut c_void,
+    _activity: *mut c_void,
+    handle: i64,
+) -> i32 {
+    let Some(state) = (handle as *mut (Document, History)).as_mut() else {
+        return 0;
+    };
+    let name = format!("Layer {}", state.0.layers.len() + 1);
+    state
+        .1
+        .execute(&mut state.0, Command::AddLayer { name })
+        .is_ok() as i32
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_rey_editor_MainActivity_nativeSetOpacity(
+    _env: *mut c_void,
+    _activity: *mut c_void,
+    handle: i64,
+    opacity: i32,
+) -> i32 {
+    let Some(state) = (handle as *mut (Document, History)).as_mut() else {
+        return 0;
+    };
+    let id = state.0.selected_layer;
+    state
+        .1
+        .execute(
+            &mut state.0,
+            Command::SetOpacity {
+                id,
+                opacity: opacity.clamp(0, 255) as u8,
+            },
+        )
+        .is_ok() as i32
+}
 
 pub const MAX_DOCUMENT_PIXELS: u64 = 144_000_000;
 pub const TILE_SIZE: u32 = 256;
