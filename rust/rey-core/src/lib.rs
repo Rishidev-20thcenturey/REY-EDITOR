@@ -24,6 +24,19 @@ impl TileStore {
     pub fn tile_count(&self) -> usize { self.tiles.len() }
     pub fn dimensions(&self) -> (u32, u32) { (self.width, self.height) }
 
+    pub fn tile(&self, tile_x: u32, tile_y: u32) -> Option<&[u8]> { self.tiles.get(&(tile_x, tile_y)).map(Vec::as_slice) }
+
+    pub fn set_rgba(&mut self, x: u32, y: u32, pixel: [u8; 4]) -> Result<(), DocumentError> {
+        if x >= self.width || y >= self.height { return Err(DocumentError::MissingTile); }
+        let tx = x / TILE_SIZE; let ty = y / TILE_SIZE;
+        let local_x = x % TILE_SIZE; let local_y = y % TILE_SIZE;
+        let stride = self.width.saturating_sub(tx * TILE_SIZE).min(TILE_SIZE);
+        let tile = self.ensure_tile(tx, ty)?;
+        let offset = ((local_y * stride + local_x) * 4) as usize;
+        tile[offset..offset + 4].copy_from_slice(&pixel);
+        Ok(())
+    }
+
     pub fn ensure_tile(&mut self, tile_x: u32, tile_y: u32) -> Result<&mut [u8], DocumentError> {
         let max_x = self.width.div_ceil(TILE_SIZE);
         let max_y = self.height.div_ceil(TILE_SIZE);
@@ -171,4 +184,5 @@ mod tests {
     #[test] fn sparse_tiles_allocate_only_when_touched() { let mut tiles=TileStore::new(1000,1000).unwrap(); assert_eq!(tiles.tile_count(),0); tiles.ensure_tile(2,3).unwrap(); assert_eq!(tiles.tile_count(),1); assert_eq!(tiles.ensure_tile(99,0),Err(DocumentError::MissingTile)); }
     #[test] fn history_groups_commands_and_bounds_memory() { let mut d=Document::new(10,10).unwrap(); let mut h=History::new(2); h.execute(&mut d, Command::AddLayer { name:"A".into() }).unwrap(); h.execute(&mut d, Command::AddLayer { name:"B".into() }).unwrap(); h.execute(&mut d, Command::AddLayer { name:"C".into() }).unwrap(); assert_eq!(h.undo_len(),2); assert!(h.undo(&mut d)); assert!(h.redo(&mut d)); assert_eq!(d.layers.len(),4); }
     #[test] fn masks_are_dimension_checked() { let mut d=Document::new(4,4).unwrap(); let id=d.add_layer("Masked"); assert_eq!(d.set_mask(id, vec![0;15]), Err(DocumentError::InvalidMask)); assert!(d.set_mask(id, vec![255;16]).is_ok()); }
+    #[test] fn tile_pixels_are_sparse_and_bounded() { let mut t=TileStore::new(300,300).unwrap(); assert_eq!(t.tile_count(),0); t.set_rgba(256,256,[1,2,3,4]).unwrap(); assert_eq!(t.tile_count(),1); assert_eq!(&t.tile(1,1).unwrap()[0..4],[1,2,3,4]); assert!(t.set_rgba(300,0,[0;4]).is_err()); }
 }
