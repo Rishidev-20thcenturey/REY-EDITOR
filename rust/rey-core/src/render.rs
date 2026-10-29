@@ -53,7 +53,7 @@ pub fn composite_pixel(layers: impl IntoIterator<Item = (Layer, [u8; 4])>) -> [u
                 .as_ref()
                 .and_then(|m| m.first().copied())
                 .unwrap_or(255);
-            over(dst, pixel, layer.opacity, mask)
+            over_mode(dst, pixel, layer.opacity, mask, layer.blend_mode)
         })
 }
 

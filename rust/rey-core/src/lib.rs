@@ -91,6 +91,7 @@ pub struct Layer {
     pub name: String,
     pub visible: bool,
     pub opacity: u8,
+    pub blend_mode: render::BlendMode,
     pub mask: Option<Vec<u8>>,
 }
 
@@ -102,6 +103,7 @@ pub enum Command {
     MoveLayer { id: u64, offset: isize },
     SetVisibility { id: u64, visible: bool },
     SetMask { id: u64, mask: Vec<u8> },
+    SetBlendMode { id: u64, mode: render::BlendMode },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -206,6 +208,7 @@ impl Document {
                 name: "Background".into(),
                 visible: true,
                 opacity: 255,
+                blend_mode: render::BlendMode::Normal,
                 mask: None,
             }],
             selected_layer: 1,
@@ -227,6 +230,10 @@ impl Document {
                 Ok(())
             }
             Command::SetMask { id, mask } => self.set_mask(id, mask),
+            Command::SetBlendMode { id, mode } => {
+                self.layer_mut(id)?.blend_mode = mode;
+                Ok(())
+            }
         }
     }
 
@@ -238,6 +245,7 @@ impl Document {
             name: name.into(),
             visible: true,
             opacity: 255,
+            blend_mode: render::BlendMode::Normal,
             mask: None,
         });
         self.selected_layer = id;
